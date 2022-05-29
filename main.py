@@ -29,7 +29,7 @@ BRICKHEIGHT = GAMEHEIGHT / BRICKROWS
 
 BALLRADIUS = 10
 
-REALSPEEDLIMIT = 16
+REALSPEEDLIMIT = 28
 
 # COLORS
 GREEN = (99, 213, 54)
@@ -738,7 +738,7 @@ class GoldBrick(Brick):
     def __init__(self, value: int, gold_value: int, font=BIGBRICKFONT):
         self.font = font
         self.x = GAMEMARGIN + GAMEWIDTH / 2 - BRICKWIDTH * 5 / 2
-        self.y = GAMEMARGIN + NAVHEIGHT + GAMEHEIGHT / 2 - BRICKHEIGHT * 5 / 2
+        self.y = GAMEMARGIN + NAVHEIGHT + GAMEHEIGHT * 2 / 3 - BRICKHEIGHT * 5 / 2
         self.color = (244, 204, 3)
         self.gold_value = gold_value
         self.infected = 0
