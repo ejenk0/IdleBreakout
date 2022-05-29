@@ -4,8 +4,6 @@ import pygame as pg
 
 pg.init()
 
-# clock = pg.clock.Clock()
-
 # CONFIG
 WINWIDTH = 900
 WINHEIGHT = 600
@@ -1220,13 +1218,21 @@ Text(
 ).add(uielements)
 
 
+clock = pg.time.Clock()
+
 # DEV TOOLS
 
 devtools = pg.sprite.Group()
 dev_money = Box(WINWIDTH - 20, 0, 20, 20, fillcolor="gold")
 dev_money.add(devtools)
 
-clock = pg.time.Clock()
+
+def update_fps(self):
+    self.text = str(int(clock.get_fps()))
+
+
+Text(0, WINHEIGHT - 20, 50, 10, updatefunc=update_fps).add(devtools)
+
 
 # GAME LOOP
 
