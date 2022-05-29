@@ -915,9 +915,8 @@ class CannonBall(Ball):
 class PoisonBall(Ball):
     def __init__(self):
         super().__init__((236, 1, 5), SPAWNX, SPAWNY, BALLRADIUS)
-        img = pg.image.load("images/Skull.png")
-        img = pg.transform.scale(img, (BALLRADIUS * 1.9, BALLRADIUS * 1.9))
-        self.image.blit(img, (0, 0))
+        img = Image(0, 0, BALLRADIUS * 1.9, BALLRADIUS * 1.9, "images/Skull.png")
+        self.image.blit(img.image, img.rect)
         self.name = "poison"
 
 
