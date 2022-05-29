@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, floor, log10
 import random
 import pygame as pg
 
@@ -36,6 +36,7 @@ GREEN = (99, 213, 54)
 
 # FONTS
 BRICKFONT = pg.font.SysFont("Arial", 18)
+BIGBRICKFONT = pg.font.SysFont("Arial", 26)
 PRICEFONT = pg.font.SysFont("Courier", 13)
 UIFONT = pg.font.SysFont("Courier", 15)
 
@@ -53,7 +54,7 @@ game_data = {
 # INITIAL GAME VARS
 game_vars = {
     "money": 0,
-    "level": 1,
+    "level": 20,
     "particles": 1,
     "maxballs": 50,
     "speedlimit": 40,
@@ -65,6 +66,8 @@ game_vars = {
         "cannon": [0, 0],
         "poison": [0, 0],
     },
+    "claimablegold": 0,
+    "gold": 0,
     "devtools": False,
 }
 
@@ -152,16 +155,19 @@ win = pg.display.set_mode((WINWIDTH, WINHEIGHT))
 
 def generate_level(map, level):
     bricks = pg.sprite.Group()
-    for x, col in enumerate(map):
-        for y, row in enumerate(col):
-            if row:
-                bricks.add(
-                    Brick(
-                        x * BRICKWIDTH + GAMEMARGIN,
-                        y * BRICKHEIGHT + NAVHEIGHT,
-                        level,
+    if not level % 20 == 0:
+        for x, col in enumerate(map):
+            for y, row in enumerate(col):
+                if row:
+                    bricks.add(
+                        Brick(
+                            x * BRICKWIDTH + GAMEMARGIN,
+                            y * BRICKHEIGHT + NAVHEIGHT,
+                            level,
+                        )
                     )
-                )
+    else:
+        bricks.add(GoldBrick(value=level * 100, gold_value=floor(log10(level))))
     return bricks
 
 
@@ -683,13 +689,15 @@ class UpgradeMenu(pg.sprite.Sprite):
             self.active = False
 
 
-# BRICK
+# BRICKS
 
 
 class Brick(pg.sprite.Sprite):
-    def __init__(self, x, y, value: int):
+    def __init__(self, x, y, value: int, width=BRICKWIDTH, height=BRICKHEIGHT):
         pg.sprite.Sprite.__init__(self)
-        self.image = pg.Surface((BRICKWIDTH, BRICKHEIGHT))
+        self.width = width
+        self.height = height
+        self.image = pg.Surface((self.width, self.height))
         self.image.set_colorkey((1, 1, 255))
         self.value = value
         self.rect = self.image.get_rect()
@@ -723,6 +731,49 @@ class Brick(pg.sprite.Sprite):
         self.image.blit(
             BRICKFONT.render(str(self.value), True, (0, 0, 0)),
             (BRICKWIDTH / 2 - textwidth / 2, 2),
+        )
+
+
+class GoldBrick(Brick):
+    def __init__(self, value: int, gold_value: int, font=BIGBRICKFONT):
+        self.font = font
+        self.x = GAMEMARGIN + GAMEWIDTH / 2 - BRICKWIDTH * 5 / 2
+        self.y = GAMEMARGIN + NAVHEIGHT + GAMEHEIGHT / 2 - BRICKHEIGHT * 5 / 2
+        self.color = (244, 204, 3)
+        self.gold_value = gold_value
+        self.infected = 0
+        super().__init__(
+            self.x, self.y, value, width=BRICKWIDTH * 5, height=BRICKHEIGHT * 5
+        )
+
+    def update(self):
+        global game_vars
+        if self.value <= 0:
+            game_vars["claimablegold"] += self.gold_value
+            self.kill()
+        self.image.fill((1, 1, 255))
+        pg.draw.rect(
+            self.image,
+            self.color,
+            (0, 0, self.width, self.height),
+            border_radius=3,
+        )
+        pg.draw.rect(
+            self.image,
+            (0, 0, 0) if self.infected == 1 else (201, 0, 10),
+            (0, 0, self.width, self.height),
+            width=2,
+            border_radius=3,
+        )
+        textwidth, textheight = self.font.size(str(self.value))
+        self.image.blit(
+            self.font.render(str(self.value), True, (0, 0, 0)),
+            (self.width / 2 - textwidth / 2, self.height / 3 - textheight / 2),
+        )
+        textwidth, textheight = self.font.size("+" + str(self.gold_value) + " GOLD")
+        self.image.blit(
+            self.font.render("+" + str(self.gold_value) + " GOLD", True, (0, 0, 0)),
+            (self.width / 2 - textwidth / 2, self.height * 2 / 3 - textheight / 2),
         )
 
 
@@ -1234,6 +1285,12 @@ def update_fps(self):
 
 Text(0, WINHEIGHT - 20, 50, 10, updatefunc=update_fps).add(devtools)
 
+
+def update_gold_count(self):
+    self.text = str(game_vars["claimablegold"]) + " | " + str(game_vars["gold"])
+
+
+Text(0, WINHEIGHT - 35, 50, 10, updatefunc=update_gold_count).add(devtools)
 
 # GAME LOOP
 
