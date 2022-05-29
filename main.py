@@ -1280,10 +1280,12 @@ while playing:
                     brick.value -= 1
                     game_vars["money"] += 1
                     brick.update()
-            # DEV MONEY
-            if dev_money.rect.collidepoint(pos):
-                game_vars["money"] *= 2
-                break
+
+            if game_vars["devtools"]:
+                # DEV MONEY
+                if dev_money.rect.collidepoint(pos):
+                    game_vars["money"] *= 2
+                    break
 
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_d:
