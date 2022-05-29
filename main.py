@@ -29,7 +29,7 @@ BRICKHEIGHT = GAMEHEIGHT / BRICKROWS
 
 BALLRADIUS = 10
 
-REALSPEEDLIMIT = 10
+REALSPEEDLIMIT = 16
 
 # COLORS
 GREEN = (99, 213, 54)
@@ -65,6 +65,7 @@ game_vars = {
         "cannon": [0, 0],
         "poison": [0, 0],
     },
+    "devtools": False,
 }
 
 
@@ -1238,7 +1239,7 @@ Text(0, WINHEIGHT - 20, 50, 10, updatefunc=update_fps).add(devtools)
 
 playing = True
 while playing:
-    clock.tick(120)
+    clock.tick(60)
     for event in pg.event.get():
         if event.type == pg.QUIT:
             playing = False
@@ -1283,6 +1284,10 @@ while playing:
             if dev_money.rect.collidepoint(pos):
                 game_vars["money"] *= 2
                 break
+
+        if event.type == pg.KEYDOWN:
+            if event.key == pg.K_d:
+                game_vars["devtools"] = not game_vars["devtools"]
     win.fill(NAVCOLOR)
 
     pg.draw.rect(
@@ -1304,8 +1309,9 @@ while playing:
     uielements.update()
     uielements.draw(win)
 
-    devtools.update()
-    devtools.draw(win)
+    if game_vars["devtools"]:
+        devtools.update()
+        devtools.draw(win)
 
     plasmablasts = pg.sprite.Group()
     collisions = pg.sprite.groupcollide(balls, bricks, False, False)
