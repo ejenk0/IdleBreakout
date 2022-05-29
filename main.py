@@ -476,7 +476,7 @@ class Image(pg.sprite.Sprite):
     def __init__(self, x, y, width, height, path):
         super().__init__()
         self.image = pg.image.load(path)
-        self.image = pg.transform.scale(self.image, (width, height))
+        self.image = pg.transform.scale(self.image, (round(width), round(height)))
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -1145,13 +1145,14 @@ Text(
 
 # PRESTIGE BUTTON
 
-Box(
+open_prestige_menu = Box(
     NAVMARGINX + NAVITEMHEIGHT * 8.6,
     NAVMARGINY + NAVITEMHEIGHT / 2,
     NAVITEMHEIGHT * 2,
     NAVITEMHEIGHT / 2,
     fillcolor=(243, 237, 215),
-).add(uielements)
+)
+open_prestige_menu.add(uielements)
 
 Text(
     NAVMARGINX + NAVITEMHEIGHT * 8.6,
@@ -1163,13 +1164,14 @@ Text(
 
 # POWERUP BUTTON
 
-Box(
+open_powerup_menu = Box(
     NAVMARGINX + NAVITEMHEIGHT * 10.7,
     NAVMARGINY,
     NAVITEMHEIGHT,
     NAVITEMHEIGHT,
     fillcolor=GREEN,
-).add(uielements)
+)
+open_powerup_menu.add(uielements)
 
 Image(
     NAVMARGINX + NAVITEMHEIGHT * 10.7,
@@ -1227,6 +1229,8 @@ dev_money.add(devtools)
 
 clock = pg.time.Clock()
 
+# GAME LOOP
+
 playing = True
 while playing:
     clock.tick(120)
@@ -1250,6 +1254,18 @@ while playing:
             if open_upgrade_menu.rect.collidepoint(pos):
                 upgrademenu.active = True
                 upgrademenu.active_tab = "upgrades"
+                break
+
+            # PRESTIGE MENU OPEN BUTTON
+            if open_prestige_menu.rect.collidepoint(pos):
+                upgrademenu.active = True
+                upgrademenu.active_tab = "prestige"
+                break
+
+            # POWERUP MENU OPEN BUTTON
+            if open_powerup_menu.rect.collidepoint(pos):
+                upgrademenu.active = True
+                upgrademenu.active_tab = "powerups"
                 break
 
             # BRICKS
