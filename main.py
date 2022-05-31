@@ -1,5 +1,6 @@
 from math import ceil, floor, log10
 import random
+from matplotlib.pyplot import fill
 import pygame as pg
 
 pg.init()
@@ -54,7 +55,7 @@ game_data = {
 # INITIAL GAME VARS
 game_vars = {
     "money": 0,
-    "level": 20,
+    "level": 1,
     "particles": 1,
     "maxballs": 50,
     "speedlimit": 40,
@@ -68,6 +69,13 @@ game_vars = {
     },
     "claimablegold": 0,
     "gold": 0,
+    "prestigeupgrades": {
+        "cashbonus": 0,
+        "ballspeed": 0,
+        "ballpower": 0,
+        "lasers": 0,
+        "maxballs": 0,
+    },
     "devtools": False,
 }
 
@@ -175,17 +183,21 @@ def count_balls(balls, _class):
     return sum(isinstance(ball, _class) for ball in balls)
 
 
-def currency_formatter(amount, currency="$"):
-    return currency + (
-        str(round(amount, 1))
-        if amount < 1000
-        else str(round(amount / 1000, 1)) + "K"
-        if amount < 1000000
-        else str(round(amount / 1000000, 1)) + "M"
-        if amount < 1000000000
-        else str(round(amount / 1000000000, 1)) + "B"
-        if amount < 1000000000000
-        else str(round(amount / 1000000000000, 1)) + "T"
+def currency_formatter(amount, currency="$", backwards=False):
+    return (
+        currency * (not backwards)
+        + (
+            str(round(amount, 1))
+            if amount < 1000
+            else str(round(amount / 1000, 1)) + "K"
+            if amount < 1000000
+            else str(round(amount / 1000000, 1)) + "M"
+            if amount < 1000000000
+            else str(round(amount / 1000000000, 1)) + "B"
+            if amount < 1000000000000
+            else str(round(amount / 1000000000000, 1)) + "T"
+        )
+        + currency * backwards
     )
 
 
@@ -228,6 +240,15 @@ def determineSide(ball: pg.sprite.Sprite, brick: pg.sprite.Sprite):
     return "diagonal"
 
 
+def solve_blocking_bricks(balls: pg.sprite.Group, bricks: pg.sprite.Group):
+    collisions = pg.sprite.groupcollide(balls, bricks, False, False)
+    for ball in collisions:
+        for brick in collisions[ball]:
+            if isinstance(brick, GoldBrick):
+                ball.x = GAMEMARGIN + 40
+                ball.y = NAVHEIGHT + GAMEHEIGHT + GAMEMARGIN - 40
+
+
 # UI
 
 
@@ -239,6 +260,7 @@ class PurchaseButton(pg.sprite.Sprite):
         ball=None,
         initial_price=0,
         price_multiplier=1,
+        price_increment=None,
         label1="",
         label2="",
         width=NAVITEMHEIGHT,
@@ -246,9 +268,13 @@ class PurchaseButton(pg.sprite.Sprite):
         ballname=None,
         upgradeindex=None,
         upgradeincrement=None,
+        upgrademult=None,
         upgrademax=None,
+        firsteffect=None,
         height=NAVITEMHEIGHT,
         font=PRICEFONT,
+        prestigestyle=False,
+        descriptions=None,
     ):
         super().__init__()
         self.ball = ball
@@ -258,6 +284,7 @@ class PurchaseButton(pg.sprite.Sprite):
         self.rect.y = y
         self.initial_price = initial_price
         self.price_multiplier = price_multiplier
+        self.price_increment = price_increment
         self.label1 = label1
         self.label2 = label2
         self.width = width
@@ -265,19 +292,59 @@ class PurchaseButton(pg.sprite.Sprite):
         self.ballname = ballname
         self.upgradeindex = upgradeindex
         self.upgradeincrement = upgradeincrement
+        self.upgrademult = upgrademult
         self.upgrademax = upgrademax
+        self.firsteffect = firsteffect
         self.height = height
         self.font = font
+        self.prestigestyle = prestigestyle
+        self.descriptions = descriptions
         self._layer = 5
         self.update()
 
     def update(self):
+        # bg
+        self.image.fill((245, 245, 245))
         # BALL ICON / LABELS
         if self.ball:
             ballcount = sum(isinstance(ball, self.ball) for ball in balls)
             self.price = round(
                 self.initial_price * (self.price_multiplier**ballcount)
             )
+        elif self.prestigestyle:
+            upgradelevel = game_vars["prestigeupgrades"][self.upgradetype]
+            if self.price_increment:
+                self.price = round(
+                    self.initial_price + self.price_increment * upgradelevel
+                )
+            else:
+                self.price = round(
+                    self.initial_price * (self.price_multiplier**upgradelevel)
+                )
+            self.label2 = (
+                str(
+                    (
+                        (self.firsteffect + upgradelevel * self.upgradeincrement)
+                        if upgradelevel > 0
+                        else 0
+                    )
+                    if self.upgradeincrement
+                    else (self.firsteffect * (self.upgrademult**upgradelevel - 1))
+                )
+                + " >> "
+                + str(
+                    (
+                        (self.firsteffect + (upgradelevel + 1) * self.upgradeincrement)
+                        if upgradelevel > 0
+                        else (self.firsteffect + (upgradelevel) * self.upgradeincrement)
+                    )
+                    if self.upgradeincrement
+                    else (
+                        self.firsteffect * (self.upgrademult ** (upgradelevel + 1) - 1)
+                    )
+                )
+            )
+
         else:
             self.price = self.initial_price * (
                 self.price_multiplier
@@ -297,12 +364,14 @@ class PurchaseButton(pg.sprite.Sprite):
                 )
             )
 
-        # bg
-        self.image.fill((245, 245, 245))
         # progress bar
         if (
             self.upgrademax
-            and game_vars["upgrades"][self.ballname][self.upgradeindex]
+            and (
+                game_vars["upgrades"][self.ballname][self.upgradeindex]
+                if not self.prestigestyle
+                else game_vars["prestigeupgrades"][self.upgradetype]
+            )
             >= self.upgrademax
         ):
             pg.draw.rect(
@@ -335,11 +404,18 @@ class PurchaseButton(pg.sprite.Sprite):
             (self.width, self.height * 2 / 3),
             2,
         )
-        text = currency_formatter(self.price)
+        if self.prestigestyle:
+            text = currency_formatter(self.price, "G", True)
+        else:
+            text = currency_formatter(self.price)
         # PRICE
         if (
             self.upgrademax
-            and game_vars["upgrades"][self.ballname][self.upgradeindex]
+            and (
+                game_vars["upgrades"][self.ballname][self.upgradeindex]
+                if not self.prestigestyle
+                else game_vars["prestigeupgrades"][self.upgradetype]
+            )
             >= self.upgrademax
         ):
             text = "SOLD OUT"
@@ -357,6 +433,14 @@ class PurchaseButton(pg.sprite.Sprite):
                     self.width / 2 - ball.image.get_width() / 2,
                     self.height * 2 / 3 / 2 - ball.image.get_height() / 2,
                 ),
+            )
+        elif self.prestigestyle:
+            for i, desc in enumerate(self.descriptions):
+                text = Text(0, 2 + i * 15, self.width, 15, desc)
+                self.image.blit(text.image, text.rect)
+            self.image.blit(
+                self.font.render(self.label2, True, (0, 0, 0)),
+                (self.width / 2 - self.font.size(self.label2)[0] / 2, 24),
             )
         else:
             self.image.blit(
@@ -415,13 +499,10 @@ class DeleteButton(pg.sprite.Sprite):
         self.update()
 
     def update(self):
-        # bg
-        self.image.fill((245, 245, 245))
-        # border
-        pg.draw.rect(self.image, (0, 0, 0), (0, 0, self.width, self.height), 2)
-        # text
-        text = Text(0, 0, self.width, self.height, "DELETE 1x")
-        self.image.blit(text.image, text.rect)
+        delete_button = Box(
+            0, 0, self.width, self.height, fillcolor=(245, 245, 245), text="DELETE 1x"
+        )
+        self.image.blit(delete_button.image, delete_button.rect)
 
     def onClick(self):
         global balls
@@ -466,15 +547,61 @@ class Text(pg.sprite.Sprite):
 
 
 class Box(pg.sprite.Sprite):
-    def __init__(self, x, y, width, height, bordercolor=(0, 0, 0), fillcolor=NAVCOLOR):
+    def __init__(
+        self,
+        x,
+        y,
+        width,
+        height,
+        bordercolor=(0, 0, 0),
+        fillcolor=NAVCOLOR,
+        text=None,
+        textupdatefunc=None,
+        rounding=0,
+    ):
         super().__init__()
         self.image = pg.Surface((width, height))
-        self.image.fill(fillcolor)
-        pg.draw.rect(self.image, bordercolor, (0, 0, width, height), 2)
+        self.image.set_colorkey((1, 1, 255))
+        self.image.fill((1, 1, 255))
+        pg.draw.rect(
+            self.image, fillcolor, (0, 0, width, height), border_radius=rounding
+        )
+        pg.draw.rect(
+            self.image, bordercolor, (0, 0, width, height), 2, border_radius=rounding
+        )
         self.rect = self.image.get_rect()
+        self.bordercolor = bordercolor
+        self.fillcolor = fillcolor
+        self.width = width
+        self.height = height
         self.rect.x = x
         self.rect.y = y
+        self.rounding = rounding
         self._layer = 2
+        if text or textupdatefunc:
+            self.text = Text(0, 0, width, height, text, updatefunc=textupdatefunc)
+            self.image.blit(self.text.image, self.text.rect)
+        else:
+            self.text = None
+
+    def update(self):
+        self.image.fill((1, 1, 255))
+        pg.draw.rect(
+            self.image,
+            self.fillcolor,
+            (0, 0, self.width, self.height),
+            border_radius=self.rounding,
+        )
+        pg.draw.rect(
+            self.image,
+            self.bordercolor,
+            (0, 0, self.width, self.height),
+            2,
+            border_radius=self.rounding,
+        )
+        if self.text:
+            self.text.update()
+            self.image.blit(self.text.image, self.text.rect)
 
 
 class Image(pg.sprite.Sprite):
@@ -648,23 +775,99 @@ class UpgradeMenu(pg.sprite.Sprite):
 
                     self.delete_buttons[column] = delete_button
 
+            elif self.active_tab == "prestige":
+                # CLAIM BOX
+                claim_box = Box(
+                    self.width / 2 - NAVITEMHEIGHT * 4 / 2,
+                    100,
+                    NAVITEMHEIGHT * 4,
+                    NAVITEMHEIGHT * 2,
+                    fillcolor=(243, 237, 215),
+                )
+                self.image.blit(claim_box.image, claim_box.rect)
+
+                claim_text = Text(
+                    self.width / 2 - NAVITEMHEIGHT * 4 / 2,
+                    120,
+                    NAVITEMHEIGHT * 4,
+                    40,
+                    "CLAIM " + str(game_vars["claimablegold"]) + " GOLD ON RESET",
+                )
+                self.image.blit(claim_text.image, claim_text.rect)
+
+                self.claim_button = Box(
+                    self.width / 2 - NAVITEMHEIGHT * 1.5 / 2,
+                    180,
+                    NAVITEMHEIGHT * 1.5,
+                    NAVITEMHEIGHT / 2,
+                    text="CLAIM",
+                )
+                self.image.blit(self.claim_button.image, self.claim_button.rect)
+
+                # GOLD COUNT
+                gold_count_outline = Box(
+                    self.width / 2 - NAVITEMHEIGHT * 1.4 / 2,
+                    236,
+                    NAVITEMHEIGHT * 1.4,
+                    NAVITEMHEIGHT / 2 + 8,
+                    fillcolor=(230, 230, 230),
+                    rounding=7,
+                )
+                self.image.blit(gold_count_outline.image, gold_count_outline.rect)
+
+                gold_count = Box(
+                    self.width / 2 - NAVITEMHEIGHT * 1.2 / 2,
+                    240,
+                    NAVITEMHEIGHT * 1.2,
+                    NAVITEMHEIGHT / 2,
+                    fillcolor=(244, 204, 3),
+                    text=str(game_vars["gold"]),
+                    rounding=7,
+                )
+                self.image.blit(gold_count.image, gold_count.rect)
+
+                # GENERATE PRESTIGE BUTTONS
+                column_width = self.width / len(prestige_upgrades)
+                for i, column in enumerate(prestige_upgrades):
+                    button = PurchaseButton(
+                        i * column_width + column_width / 2 - column_width * 1.5 / 4,
+                        300,
+                        width=column_width * 3 / 4,
+                        height=NAVITEMHEIGHT * 1.3,
+                        prestigestyle=True,
+                        upgradetype=column,
+                        price_increment=prestige_upgrades[column]["priceincrement"]
+                        if "priceincrement" in prestige_upgrades[column].keys()
+                        else None,
+                        price_multiplier=prestige_upgrades[column]["pricemult"]
+                        if "pricemult" in prestige_upgrades[column].keys()
+                        else None,
+                        initial_price=prestige_upgrades[column]["firstprice"],
+                        upgradeincrement=prestige_upgrades[column]["effectincrement"]
+                        if "effectincrement" in prestige_upgrades[column].keys()
+                        else None,
+                        upgrademult=prestige_upgrades[column]["effectmult"]
+                        if "effectmult" in prestige_upgrades[column].keys()
+                        else None,
+                        upgrademax=prestige_upgrades[column]["max"],
+                        firsteffect=prestige_upgrades[column]["firsteffect"],
+                        descriptions=[
+                            prestige_upgrades[column]["desc" + str(i)]
+                            for i in range(1, 4)
+                        ],
+                    )
+                    self.image.blit(button.image, button.rect)
+
             # CLOSE BUTTON
 
-            self.close_rect = pg.Rect(
+            self.close_button = Box(
                 self.width / 2 - NAVITEMHEIGHT * 1.5 / 2,
                 self.height - 37,
                 NAVITEMHEIGHT * 1.5,
                 30,
+                text="CLOSE",
             )
-            pg.draw.rect(self.image, (0, 0, 0), self.close_rect, 2, border_radius=5)
-            close_text = Text(
-                self.close_rect.x,
-                self.close_rect.y,
-                self.close_rect.width,
-                self.close_rect.height,
-                "CLOSE",
-            )
-            self.image.blit(close_text.image, close_text.rect)
+            self.image.blit(self.close_button.image, self.close_button.rect)
 
         else:
             self.image = pg.Surface((0, 0))
@@ -685,7 +888,7 @@ class UpgradeMenu(pg.sprite.Sprite):
             if button.rect.collidepoint(pos):
                 button.onClick()
         # UPGRADE MENU CLOSE BUTTON
-        if self.close_rect.collidepoint(pos):
+        if self.close_button.rect.collidepoint(pos):
             self.active = False
 
 
@@ -797,6 +1000,9 @@ class Ball(pg.sprite.Sprite):
         self.name = "basic"
         angle = random.randint(0, 360)
         self.speed = pg.math.Vector2(1, 0).rotate(angle).normalize()
+        data = get_ball_data(self.name)
+        self.velocity = data["speed"]
+        self.strength = data["power"]
 
     def update(self):
         data = get_ball_data(self.name)
@@ -1089,6 +1295,59 @@ upgrades = {
     },
 }
 
+prestige_upgrades = {
+    "cashbonus": {
+        "desc1": "Level",
+        "desc2": "Complete",
+        "desc3": "Cash Bonus",
+        "firsteffect": 50,
+        "effectmult": 2,
+        "firstprice": 2,
+        "pricemult": 2,
+        "max": 10,
+    },
+    "ballspeed": {
+        "desc1": "",
+        "desc2": "Ball Speed",
+        "desc3": "Increase",
+        "firsteffect": 2,
+        "effectincrement": 1,
+        "firstprice": 5,
+        "pricemult": 2,
+        "max": 9,
+    },
+    "ballpower": {
+        "desc1": "",
+        "desc2": "Ball Power",
+        "desc3": "Multiplier",
+        "firsteffect": 2,
+        "effectmult": 2,
+        "firstprice": 5,
+        "pricemult": 2,
+        "max": 18,
+    },
+    "lasers": {
+        "desc1": "",
+        "desc2": "Unlock VAUS",
+        "desc3": "Laser",
+        "firsteffect": 1,
+        "effectincrement": 1,
+        "firstprice": 10,
+        "pricemult": 1.5,
+        "max": 4,
+    },
+    "maxballs": {
+        "desc1": "Maximum",
+        "desc2": "Number of",
+        "desc3": "Balls",
+        "firsteffect": 60,
+        "effectincrement": 10,
+        "firstprice": 4,
+        "pricemult": 1.5,
+        "max": 32,
+    },
+}
+
 balls = pg.sprite.Group()
 oneshots = pg.sprite.Group()
 
@@ -1181,16 +1440,9 @@ open_upgrade_menu = Box(
     NAVITEMHEIGHT * 2,
     NAVITEMHEIGHT / 2,
     fillcolor=(243, 237, 215),
+    text="UPGRADES",
 )
 open_upgrade_menu.add(uielements)
-
-Text(
-    NAVMARGINX + NAVITEMHEIGHT * 8.6,
-    NAVMARGINY,
-    NAVITEMHEIGHT * 2,
-    NAVITEMHEIGHT / 2,
-    text="UPGRADES",
-).add(uielements)
 
 # PRESTIGE BUTTON
 
@@ -1200,16 +1452,9 @@ open_prestige_menu = Box(
     NAVITEMHEIGHT * 2,
     NAVITEMHEIGHT / 2,
     fillcolor=(243, 237, 215),
+    text="PRESTIGE",
 )
 open_prestige_menu.add(uielements)
-
-Text(
-    NAVMARGINX + NAVITEMHEIGHT * 8.6,
-    NAVMARGINY + NAVITEMHEIGHT / 2,
-    NAVITEMHEIGHT * 2,
-    NAVITEMHEIGHT / 2,
-    text="PRESTIGE",
-).add(uielements)
 
 # POWERUP BUTTON
 
@@ -1248,25 +1493,18 @@ Image(
     path="images/Dollar.png",
 ).add(uielements)
 
+
+def update_money(self):
+    self.text = currency_formatter(game_vars["money"], currency="")
+
+
 Box(
     NAVMARGINX + NAVITEMHEIGHT * 12.3,
     NAVMARGINY + NAVITEMHEIGHT * 0.05,
     NAVITEMHEIGHT * 1.7,
     NAVITEMHEIGHT / 2 - NAVITEMHEIGHT * 0.05,
     fillcolor=GREEN,
-).add(uielements)
-
-
-def update_money(self):
-    self.text = currency_formatter(game_vars["money"], currency="")
-
-
-Text(
-    NAVMARGINX + NAVITEMHEIGHT * 12.3,
-    NAVMARGINY + NAVITEMHEIGHT * 0.05,
-    NAVITEMHEIGHT * 1.7,
-    NAVITEMHEIGHT / 2 - NAVITEMHEIGHT * 0.05,
-    updatefunc=update_money,
+    textupdatefunc=update_money,
 ).add(uielements)
 
 
@@ -1379,7 +1617,7 @@ while playing:
         if ball.name == "plasma":
             plasmablasts.add(PlasmaBlast(ball.rect, ball.strength))
         game_vars["money"] += max(0, min(brick.value, ball.strength * brick.infected))
-        brick.value -= ball.strength * brick.infected
+        brick.value -= int(ball.strength * brick.infected)
 
         if ball.name != "cannon" or brick.value > 0:
             side = determineSide(ball, brick)
@@ -1401,7 +1639,7 @@ while playing:
     plasmacollisions = pg.sprite.groupcollide(plasmablasts, bricks, False, False)
     for blast in plasmacollisions:
         for brick in plasmacollisions[blast]:
-            brick.value -= blast.strength
+            brick.value -= int(blast.strength)
             game_vars["money"] += max(0, min(brick.value, blast.strength))
             if brick.value <= 0:
                 bricks.remove(brick)
@@ -1418,5 +1656,6 @@ while playing:
         game_vars["level"] += 1
         random.seed(game_vars["level"])
         bricks = generate_level(random.choice(levels), game_vars["level"])
+        solve_blocking_bricks(balls, bricks)
 
     pg.display.update()
