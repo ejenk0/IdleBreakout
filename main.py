@@ -1,9 +1,21 @@
 from math import ceil, floor, log10
+from os import path
 import random
-from matplotlib.pyplot import fill
+import sys
 import pygame as pg
 
 pg.init()
+
+
+def resource_path(relative_path):
+    if hasattr(sys, "_MEIPASS"):
+        return path.join(sys._MEIPASS, relative_path)
+    return path.join(relative_path)
+
+
+icon_img = pg.image.load(resource_path("images/idleBreakoutIcon.png"))
+pg.display.set_icon(icon_img)
+pg.display.set_caption("Idle Breakout")
 
 # CONFIG
 WINWIDTH = 900
@@ -1171,7 +1183,9 @@ class CannonBall(Ball):
 class PoisonBall(Ball):
     def __init__(self):
         super().__init__((236, 1, 5), SPAWNX, SPAWNY, BALLRADIUS)
-        img = Image(0, 0, BALLRADIUS * 1.9, BALLRADIUS * 1.9, "images/Skull.png")
+        img = Image(
+            0, 0, BALLRADIUS * 1.9, BALLRADIUS * 1.9, resource_path("images/Skull.png")
+        )
         self.image.blit(img.image, img.rect)
         self.name = "poison"
 
@@ -1472,7 +1486,7 @@ Image(
     NAVMARGINY,
     NAVITEMHEIGHT * 0.99,
     NAVITEMHEIGHT,
-    "images/upgrade.svg",
+    resource_path("images/upgrade.svg"),
 ).add(uielements)
 
 # MONEY DISPLAY
@@ -1490,7 +1504,7 @@ Image(
     NAVMARGINY + NAVITEMHEIGHT * 0.03,
     NAVITEMHEIGHT * 0.55,
     NAVITEMHEIGHT / 2 - NAVITEMHEIGHT * 0.05,
-    path="images/Dollar.png",
+    path=resource_path("images/Dollar.png"),
 ).add(uielements)
 
 
